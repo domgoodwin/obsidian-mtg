@@ -6,7 +6,11 @@ import {
 	DEFAULT_COLLECTION_SYNC_INTERVAL,
 	syncCounts,
 } from "src/collection";
-import { renderDecklist } from "src/renderer";
+import {
+	renderDecklist,
+	fetchCardDataByIDFromScryfall,
+	renderCollection,
+} from "src/renderer";
 import { ObsidianPluginMtgSettings } from "src/settings";
 
 const DEFAULT_SETTINGS: ObsidianPluginMtgSettings = {
@@ -70,6 +74,36 @@ export default class ObsidianPluginMtg extends Plugin {
 						source,
 						this.cardCounts,
 						this.settings
+					);
+				} catch (err) {
+					error = err;
+					console.log(err);
+					const errorNode = document.createDiv({
+						text: error,
+						cls: "obsidian-plugin-mtg-error",
+					});
+					el.appendChild(errorNode);
+				}
+			}
+		);
+
+		this.registerMarkdownCodeBlockProcessor(
+			"mtg-collection",
+			async (source: string, el: HTMLElement, ctx) => {
+				let error = null;
+
+				// Sync card counts once if they haven't been already
+				if (!this.cardCounts) {
+					this.cardCounts = await syncCounts(vault, this.settings);
+				}
+
+				try {
+					await renderCollection(
+						el,
+						source,
+						this.cardCounts,
+						this.settings,
+						fetchCardDataByIDFromScryfall
 					);
 				} catch (err) {
 					error = err;

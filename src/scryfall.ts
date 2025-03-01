@@ -180,3 +180,35 @@ export const getMultipleCardData = async (
 
 	return request(params);
 };
+
+export const getCardDataByCode = async (
+	setCode: string,
+	cardNumber: string,
+	request = promiseWrappedRequest
+): Promise<CardData> => {
+	const params: RequestOptions = {
+		url: `https://api.scryfall.com/cards/${setCode}/${cardNumber}`,
+	};
+	return request(params);
+};
+
+export const getMultipleCardDataByID = async (
+	setCode: string,
+	cardNumbers: string[],
+	request = promiseWrappedRequest
+): Promise<CardData[]> => {
+	if (cardNumbers.length === 0) {
+		// Return an empty response
+		return new Promise((resolve, reject) => {
+			resolve({} as CardData[]);
+		});
+	}
+
+	cardNumbers.forEach((cardNumber) => {
+		getCardDataByCode;
+	});
+
+	return Promise.all(
+		cardNumbers.map((cardNumber) => getCardDataByCode(setCode, cardNumber))
+	);
+};
