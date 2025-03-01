@@ -2,20 +2,25 @@ import { CardCounts, nameToId, UNKNOWN_CARD } from "./collection";
 import {
 	CardData,
 	getMultipleCardData,
+	getMultipleCardDataByID,
 	MAX_SCRYFALL_BATCH_SIZE,
 	ScryfallResponse,
 } from "./scryfall";
 import { ObsidianPluginMtgSettings } from "./settings";
 import { createDiv, createSpan } from "./dom-utils";
+import { error } from "console";
+import { stringify } from "querystring";
 
 const DEFAULT_SECTION_NAME = "Deck:";
 const COMMENT_DELIMITER = "#";
 
 interface Line {
-	lineType: "card" | "section" | "error" | "blank" | "comment";
+	lineType: "card" | "section" | "error" | "blank" | "comment" | "number";
 	cardCount?: number;
 	globalCount?: number | null;
 	cardName?: string;
+	cardNumber?: string;
+	cardSetCode?: string;
 	comments?: string[];
 	errors?: string[];
 	text?: string;
@@ -26,6 +31,7 @@ const setCodesRE = /(\([A-Za-z0-9]{3}\)\s\d+)/;
 const lineWithSetCodes = /(\d+)\s+([\w| ,']*)\s+(\([A-Za-z0-9]{3}\)\s\d+)/;
 const blankLineRE = /^\s+$/;
 const headingMatchRE = new RegExp("^[^[0-9|" + COMMENT_DELIMITER + "]");
+const numberRE = /\d+$/;
 
 const currencyMapping = {
 	usd: "$",
@@ -64,6 +70,7 @@ export const parseLines = (
 	// This means global counts are not available because they are missing or no collection files are present
 	let shouldSkipGlobalCounts = !Object.keys(cardCounts).length;
 
+	let currentSetCode: string = "";
 	// count, collection_count, card name, comment
 	return rawLines.map((line) => {
 		// Handle blank lines
@@ -83,9 +90,25 @@ export const parseLines = (
 
 		// Handle comment lines
 		if (line.startsWith(COMMENT_DELIMITER + " ")) {
+			let setCode: string = extractSetCode(line);
+			if (setCode != "") {
+				currentSetCode = setCode;
+			}
 			return {
 				lineType: "comment",
 				comments: [line],
+			};
+		}
+
+		// Handle card numbers, the card name will be added in later
+		if (line.match(numberRE)) {
+			return {
+				lineType: "card",
+				text: line,
+				cardNumber: line.trim(),
+				cardSetCode: currentSetCode,
+				cardCount: 1,
+				globalCount: null,
 			};
 		}
 
@@ -155,6 +178,38 @@ export const buildDistinctCardNamesList = (lines: Line[]): string[] => {
 	);
 };
 
+export const buildDistinctCardNumbersBySetList = (
+	lines: Line[]
+): Record<string, string[]> => {
+	let cardNumbersBySet: Record<string, string[]> = {};
+	lines.forEach((line) => {
+		if (line.cardNumber && line.cardSetCode) {
+			if (!cardNumbersBySet[line.cardSetCode]) {
+				cardNumbersBySet[line.cardSetCode] = [];
+			}
+			cardNumbersBySet[line.cardSetCode].push(line.cardNumber);
+		}
+	});
+	return cardNumbersBySet;
+};
+
+export const extractSetCode = (value: string): string => {
+	let setCode: string = "";
+	const parts: string[] = value.slice(1).split(",");
+	console.log(parts);
+	parts.forEach((setting, i) => {
+		const settingParts: string[] = setting.split("=");
+		if (settingParts.length == 2) {
+			const key: string = settingParts[0].trim();
+			const value: string = settingParts[1].trim();
+			if (key === "set") {
+				setCode = value;
+			}
+		}
+	});
+	return setCode;
+};
+
 export const fetchCardDataFromScryfall = async (
 	distinctCardNames: string[]
 ): Promise<Record<string, CardData>> => {
@@ -192,6 +247,32 @@ export const fetchCardDataFromScryfall = async (
 	return cardDataByCardId;
 };
 
+export const fetchCardDataByIDFromScryfall = async (
+	distinctCardNumbersBySet: Record<string, string[]>
+): Promise<Record<string, Record<string, CardData>>> => {
+	let cardDataBySetCodeCardNumber: Record<
+		string,
+		Record<string, CardData>
+	> = {};
+	for (const setName in distinctCardNumbersBySet) {
+		let cardData = await getMultipleCardDataByID(
+			setName,
+			distinctCardNumbersBySet[setName]
+		);
+		const cards = [];
+		cardDataBySetCodeCardNumber[setName] = {};
+		cardData.forEach((card) => {
+			cards.push(card);
+			if (card.name) {
+				const cardId = nameToId(card.name);
+				cardDataBySetCodeCardNumber[setName][card.collector_number] =
+					card;
+			}
+		});
+	}
+	return cardDataBySetCodeCardNumber;
+};
+
 export const renderDecklist = async (
 	root: Element,
 	source: string,
@@ -199,21 +280,96 @@ export const renderDecklist = async (
 	settings: ObsidianPluginMtgSettings,
 	dataFetcher = fetchCardDataFromScryfall
 ): Promise<Element> => {
-	const containerEl = createDiv(root, {});
-	containerEl.classList.add("decklist");
-
 	const lines: string[] = source.split("\n");
 
 	const parsedLines: Line[] = parseLines(lines, cardCounts);
 
-	const linesBySection: Record<string, Line[]> = {};
+	// Create list of distinct card names
+	const distinctCardNames: string[] = buildDistinctCardNamesList(parsedLines);
+	let cardDataByCardId: Record<string, CardData> = {};
 
-	let currentSection = DEFAULT_SECTION_NAME;
-	let sections: string[] = [];
+	// Try to fetch data from Scryfall
+	try {
+		cardDataByCardId = await dataFetcher(distinctCardNames);
+	} catch (err) {
+		console.log("Error fetching card data: ", err);
+	}
+	return render(
+		root,
+		cardDataByCardId,
+		settings,
+		parsedLines,
+		DEFAULT_SECTION_NAME
+	);
+};
+
+export const renderCollection = async (
+	root: Element,
+	source: string,
+	cardCounts: CardCounts,
+	settings: ObsidianPluginMtgSettings,
+	dataFetcher = fetchCardDataByIDFromScryfall
+): Promise<Element> => {
+	const lines: string[] = source.split("\n");
+
+	const parsedLines: Line[] = parseLines(lines, cardCounts);
+
+	// Create list of distinct card names
+	const distinctCardNumbersBySet: Record<string, string[]> =
+		buildDistinctCardNumbersBySetList(parsedLines);
+	console.log(distinctCardNumbersBySet);
+	let cardDataBySetNameByCardNumber: Record<
+		string,
+		Record<string, CardData>
+	> = {};
+
+	// Try to fetch data from Scryfall
+	try {
+		cardDataBySetNameByCardNumber = await dataFetcher(
+			distinctCardNumbersBySet
+		);
+	} catch (err) {
+		console.log("Error fetching card data: ", err);
+	}
+
+	// Add found data to parsed lines so render works as it does in the deck list format
+	let cardDataByCardId: Record<string, CardData> = {};
+	let shouldSkipGlobalCounts = !Object.keys(cardCounts).length;
+	parsedLines.forEach((line) => {
+		if (line.lineType == "card" && line.cardNumber && line.cardSetCode) {
+			let cardData =
+				cardDataBySetNameByCardNumber[line.cardSetCode][
+					line.cardNumber
+				];
+			line.cardName = cardData.name;
+			let cardId = nameToId(cardData.name);
+			cardDataByCardId[cardId] = cardData;
+			if (!shouldSkipGlobalCounts) {
+				line.globalCount = cardCounts[cardId] || 0;
+			}
+		}
+	});
+	return render(root, cardDataByCardId, settings, parsedLines, "Collection:");
+};
+
+const render = async (
+	root: Element,
+	cardDataByCardId: Record<string, CardData>,
+	settings: ObsidianPluginMtgSettings,
+	parsedLines: Line[],
+	currentSection: string
+): Promise<Element> => {
+	console.log(cardDataByCardId);
+	const containerEl = createDiv(root, {});
+	containerEl.classList.add("decklist");
+	// Determines whether any card info was found for the cards on the list
+	const hasCardInfo = Object.keys(cardDataByCardId).length > 0;
+
+	const linesBySection: Record<string, Line[]> = {};
 
 	// A reverse mapping for getting names from an id
 	const idsToNames: Record<string, string> = {};
-
+	let sections: string[] = [];
 	parsedLines.forEach((line, idx) => {
 		if (idx == 0 && line.lineType !== "section") {
 			currentSection = `${currentSection}`;
@@ -229,20 +385,6 @@ export const renderDecklist = async (
 			linesBySection[currentSection].push(line);
 		}
 	});
-
-	// Create list of distinct card names
-	const distinctCardNames: string[] = buildDistinctCardNamesList(parsedLines);
-	let cardDataByCardId: Record<string, CardData> = {};
-
-	// Try to fetch data from Scryfall
-	try {
-		cardDataByCardId = await dataFetcher(distinctCardNames);
-	} catch (err) {
-		console.log("Error fetching card data: ", err);
-	}
-
-	// Determines whether any card info was found for the cards on the list
-	const hasCardInfo = Object.keys(cardDataByCardId).length > 0;
 
 	// Make elements from parsedLines
 	const sectionContainers: Element[] = [];
