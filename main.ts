@@ -11,6 +11,7 @@ import {
 	fetchCardDataByIDFromScryfall,
 	renderCollection,
 } from "src/renderer";
+import { syncFileIntoCollection } from "src/sync";
 import { ObsidianPluginMtgSettings } from "src/settings";
 
 const DEFAULT_SETTINGS: ObsidianPluginMtgSettings = {
@@ -114,6 +115,19 @@ export default class ObsidianPluginMtg extends Plugin {
 					});
 					el.appendChild(errorNode);
 				}
+			}
+		);
+		this.registerObsidianProtocolHandler(
+			"obsidian-mtg-action-sync-from-collection-list",
+			(params) => {
+				console.log("obsidian-mtg-action-sync-from-collection-list");
+				console.log(params);
+				syncFileIntoCollection(
+					vault,
+					this.settings,
+					params["file"],
+					params["cards"]
+				);
 			}
 		);
 	}

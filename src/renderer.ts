@@ -294,13 +294,7 @@ export const renderDecklist = async (
 	} catch (err) {
 		console.log("Error fetching card data: ", err);
 	}
-	return render(
-		root,
-		cardDataByCardId,
-		settings,
-		parsedLines,
-		DEFAULT_SECTION_NAME
-	);
+	return render(root, cardDataByCardId, settings, parsedLines, false);
 };
 
 export const renderCollection = async (
@@ -349,7 +343,7 @@ export const renderCollection = async (
 			}
 		}
 	});
-	return render(root, cardDataByCardId, settings, parsedLines, "Collection:");
+	return render(root, cardDataByCardId, settings, parsedLines, true);
 };
 
 const render = async (
@@ -357,7 +351,7 @@ const render = async (
 	cardDataByCardId: Record<string, CardData>,
 	settings: ObsidianPluginMtgSettings,
 	parsedLines: Line[],
-	currentSection: string
+	isCollection: boolean
 ): Promise<Element> => {
 	console.log(cardDataByCardId);
 	const containerEl = createDiv(root, {});
@@ -366,6 +360,11 @@ const render = async (
 	const hasCardInfo = Object.keys(cardDataByCardId).length > 0;
 
 	const linesBySection: Record<string, Line[]> = {};
+
+	var currentSection = DEFAULT_SECTION_NAME;
+	if (isCollection) {
+		currentSection = "Collection: ";
+	}
 
 	// A reverse mapping for getting names from an id
 	const idsToNames: Record<string, string> = {};
@@ -820,6 +819,32 @@ const render = async (
 	}
 
 	containerEl.appendChild(footer);
+
+	// Add a link to sync this collection list into your collection
+	if (isCollection) {
+		const actions = document.createElement("div");
+		actions.classList.add("actions-container");
+		const button = document.createElement("a");
+		const file = app.workspace.getActiveFile();
+		button.text = "Sync Collection";
+
+		let params = "file=" + file?.path;
+		let cards = "&cards=";
+		for (const cardId in cardDataByCardId) {
+			const cardData = cardDataByCardId[cardId];
+			const count = parsedLines
+				.filter((line) => line.lineType === "card")
+				// Remove missing values
+				.filter((line) => line.cardName === cardData.name).length;
+			cards += `${cardData.set}:${cardData.collector_number}:${count}//`;
+		}
+		params += cards;
+		button.href =
+			"obsidian://obsidian-mtg-action-sync-from-collection-list?" +
+			params;
+		actions.appendChild(button);
+		footer.appendChild(actions);
+	}
 
 	return containerEl;
 };
