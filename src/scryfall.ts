@@ -194,8 +194,7 @@ export const getCardDataByCode = async (
 
 export const getMultipleCardDataByID = async (
 	setCode: string,
-	cardNumbers: string[],
-	request = promiseWrappedRequest
+	cardNumbers: string[]
 ): Promise<CardData[]> => {
 	if (cardNumbers.length === 0) {
 		// Return an empty response
@@ -204,11 +203,9 @@ export const getMultipleCardDataByID = async (
 		});
 	}
 
-	cardNumbers.forEach((cardNumber) => {
-		getCardDataByCode;
-	});
-
 	return Promise.all(
-		cardNumbers.map((cardNumber) => getCardDataByCode(setCode, cardNumber))
+		cardNumbers
+			.map((cardNumber) => getCardDataByCode(setCode, cardNumber))
+			.filter((data) => data != null)
 	);
 };

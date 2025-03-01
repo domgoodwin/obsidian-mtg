@@ -1,3 +1,4 @@
+import { Workspace } from "obsidian";
 import { CardCounts, nameToId, UNKNOWN_CARD } from "./collection";
 import {
 	CardData,
@@ -255,13 +256,22 @@ export const fetchCardDataByIDFromScryfall = async (
 		Record<string, CardData>
 	> = {};
 	for (const setName in distinctCardNumbersBySet) {
-		let cardData = await getMultipleCardDataByID(
-			setName,
-			distinctCardNumbersBySet[setName]
-		);
+		var cardData: CardData[] = [];
+		try {
+			cardData = await getMultipleCardDataByID(
+				setName,
+				distinctCardNumbersBySet[setName]
+			);
+		} catch {
+			console.log("Error: ", error);
+		}
+
 		const cards = [];
 		cardDataBySetCodeCardNumber[setName] = {};
 		cardData.forEach((card) => {
+			if (card == null) {
+				return;
+			}
 			cards.push(card);
 			if (card.name) {
 				const cardId = nameToId(card.name);
@@ -278,6 +288,7 @@ export const renderDecklist = async (
 	source: string,
 	cardCounts: CardCounts,
 	settings: ObsidianPluginMtgSettings,
+	workspace: Workspace | undefined,
 	dataFetcher = fetchCardDataFromScryfall
 ): Promise<Element> => {
 	const lines: string[] = source.split("\n");
@@ -298,8 +309,9 @@ export const renderDecklist = async (
 		root,
 		cardDataByCardId,
 		settings,
+		workspace,
 		parsedLines,
-		DEFAULT_SECTION_NAME
+		false
 	);
 };
 
@@ -308,6 +320,7 @@ export const renderCollection = async (
 	source: string,
 	cardCounts: CardCounts,
 	settings: ObsidianPluginMtgSettings,
+	workspace: Workspace,
 	dataFetcher = fetchCardDataByIDFromScryfall
 ): Promise<Element> => {
 	const lines: string[] = source.split("\n");
@@ -341,23 +354,35 @@ export const renderCollection = async (
 				cardDataBySetNameByCardNumber[line.cardSetCode][
 					line.cardNumber
 				];
-			line.cardName = cardData.name;
-			let cardId = nameToId(cardData.name);
+			if (cardData == null) {
+				line.cardName = `Card not found (${line.cardSetCode}/${line.cardNumber})`;
+			} else {
+				line.cardName = cardData.name;
+			}
+			let cardId = nameToId(line.cardName);
 			cardDataByCardId[cardId] = cardData;
 			if (!shouldSkipGlobalCounts) {
 				line.globalCount = cardCounts[cardId] || 0;
 			}
 		}
 	});
-	return render(root, cardDataByCardId, settings, parsedLines, "Collection:");
+	return render(
+		root,
+		cardDataByCardId,
+		settings,
+		workspace,
+		parsedLines,
+		true
+	);
 };
 
 const render = async (
 	root: Element,
 	cardDataByCardId: Record<string, CardData>,
 	settings: ObsidianPluginMtgSettings,
+	workspace: Workspace | undefined,
 	parsedLines: Line[],
-	currentSection: string
+	isCollection: boolean
 ): Promise<Element> => {
 	console.log(cardDataByCardId);
 	const containerEl = createDiv(root, {});
@@ -366,6 +391,11 @@ const render = async (
 	const hasCardInfo = Object.keys(cardDataByCardId).length > 0;
 
 	const linesBySection: Record<string, Line[]> = {};
+
+	var currentSection = DEFAULT_SECTION_NAME;
+	if (isCollection) {
+		currentSection = "Collection: ";
+	}
 
 	// A reverse mapping for getting names from an id
 	const idsToNames: Record<string, string> = {};
@@ -820,6 +850,32 @@ const render = async (
 	}
 
 	containerEl.appendChild(footer);
+
+	// Add a link to sync this collection list into your collection
+	if (isCollection && workspace) {
+		const actions = document.createElement("div");
+		actions.classList.add("actions-container");
+		const button = document.createElement("a");
+		const file = workspace.getActiveFile();
+		button.text = "Sync Collection";
+
+		let params = "file=" + file?.path;
+		let cards = "&cards=";
+		for (const cardId in cardDataByCardId) {
+			const cardData = cardDataByCardId[cardId];
+			const count = parsedLines
+				.filter((line) => line.lineType === "card")
+				// Remove missing values
+				.filter((line) => line.cardName === cardData.name).length;
+			cards += `${cardData.set}:${cardData.collector_number}:${count}//`;
+		}
+		params += cards;
+		button.href =
+			"obsidian://obsidian-mtg-action-sync-from-collection-list?" +
+			params;
+		actions.appendChild(button);
+		footer.appendChild(actions);
+	}
 
 	return containerEl;
 };
