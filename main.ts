@@ -74,7 +74,8 @@ export default class ObsidianPluginMtg extends Plugin {
 						el,
 						source,
 						this.cardCounts,
-						this.settings
+						this.settings,
+						this.app.workspace
 					);
 				} catch (err) {
 					error = err;
@@ -104,6 +105,7 @@ export default class ObsidianPluginMtg extends Plugin {
 						source,
 						this.cardCounts,
 						this.settings,
+						this.app.workspace,
 						fetchCardDataByIDFromScryfall
 					);
 				} catch (err) {
@@ -174,6 +176,33 @@ class ObsidianPluginMtgSettingsTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.collection.fileExtension)
 					.onChange(async (value) => {
 						this.plugin.settings.collection.fileExtension = value;
+						await this.plugin.saveSettings();
+					})
+			);
+		// Collection CSV sync
+		new Setting(containerEl)
+			.setName("Synced Collection CSV file path")
+			.setDesc(
+				"The name of the CSV to write to when syncing from a collection list to a CSV"
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("sync")
+					.setValue(this.plugin.settings.collection.syncFileName)
+					.onChange(async (value) => {
+						this.plugin.settings.collection.syncFileName = value;
+						await this.plugin.saveSettings();
+					})
+			);
+		new Setting(containerEl)
+			.setName("Synced Collection CSV file path")
+			.setDesc("The folder of the CSV which the sync file should live")
+			.addText((text) =>
+				text
+					.setPlaceholder("mtg/")
+					.setValue(this.plugin.settings.collection.syncFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.collection.syncFolder = value;
 						await this.plugin.saveSettings();
 					})
 			);

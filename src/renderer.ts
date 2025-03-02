@@ -1,3 +1,4 @@
+import { Workspace } from "obsidian";
 import { CardCounts, nameToId, UNKNOWN_CARD } from "./collection";
 import {
 	CardData,
@@ -278,6 +279,7 @@ export const renderDecklist = async (
 	source: string,
 	cardCounts: CardCounts,
 	settings: ObsidianPluginMtgSettings,
+	workspace: Workspace | undefined,
 	dataFetcher = fetchCardDataFromScryfall
 ): Promise<Element> => {
 	const lines: string[] = source.split("\n");
@@ -294,7 +296,14 @@ export const renderDecklist = async (
 	} catch (err) {
 		console.log("Error fetching card data: ", err);
 	}
-	return render(root, cardDataByCardId, settings, parsedLines, false);
+	return render(
+		root,
+		cardDataByCardId,
+		settings,
+		workspace,
+		parsedLines,
+		false
+	);
 };
 
 export const renderCollection = async (
@@ -302,6 +311,7 @@ export const renderCollection = async (
 	source: string,
 	cardCounts: CardCounts,
 	settings: ObsidianPluginMtgSettings,
+	workspace: Workspace,
 	dataFetcher = fetchCardDataByIDFromScryfall
 ): Promise<Element> => {
 	const lines: string[] = source.split("\n");
@@ -343,13 +353,21 @@ export const renderCollection = async (
 			}
 		}
 	});
-	return render(root, cardDataByCardId, settings, parsedLines, true);
+	return render(
+		root,
+		cardDataByCardId,
+		settings,
+		workspace,
+		parsedLines,
+		true
+	);
 };
 
 const render = async (
 	root: Element,
 	cardDataByCardId: Record<string, CardData>,
 	settings: ObsidianPluginMtgSettings,
+	workspace: Workspace | undefined,
 	parsedLines: Line[],
 	isCollection: boolean
 ): Promise<Element> => {
@@ -821,11 +839,11 @@ const render = async (
 	containerEl.appendChild(footer);
 
 	// Add a link to sync this collection list into your collection
-	if (isCollection) {
+	if (isCollection && workspace) {
 		const actions = document.createElement("div");
 		actions.classList.add("actions-container");
 		const button = document.createElement("a");
-		const file = app.workspace.getActiveFile();
+		const file = workspace.getActiveFile();
 		button.text = "Sync Collection";
 
 		let params = "file=" + file?.path;
