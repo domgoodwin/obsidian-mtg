@@ -20,6 +20,8 @@ const DEFAULT_SETTINGS: ObsidianPluginMtgSettings = {
 		nameColumn: DEFAULT_COLLECTION_NAME_COLUMN,
 		countColumn: DEFAULT_COLLECTION_COUNT_COLUMN,
 		syncIntervalMs: DEFAULT_COLLECTION_SYNC_INTERVAL,
+		syncFileName: "sync",
+		syncFolder: "mtg/",
 	},
 	decklist: {
 		preferredCurrency: "usd",
