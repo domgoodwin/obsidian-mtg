@@ -24,7 +24,8 @@ export const syncFileIntoCollection = async (
 			const [set, number, count] = cardStr.split(":");
 			if (set != "" && number != "" && count != "") {
 				const data = await getCardDataByCode(set, number);
-				if (data.id) {
+
+				if (data && data.id) {
 					cards.push(data);
 					cardCount[data.id] = Number(count);
 				}

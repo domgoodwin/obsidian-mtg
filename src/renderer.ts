@@ -256,13 +256,22 @@ export const fetchCardDataByIDFromScryfall = async (
 		Record<string, CardData>
 	> = {};
 	for (const setName in distinctCardNumbersBySet) {
-		let cardData = await getMultipleCardDataByID(
-			setName,
-			distinctCardNumbersBySet[setName]
-		);
+		var cardData: CardData[] = [];
+		try {
+			cardData = await getMultipleCardDataByID(
+				setName,
+				distinctCardNumbersBySet[setName]
+			);
+		} catch {
+			console.log("Error: ", error);
+		}
+
 		const cards = [];
 		cardDataBySetCodeCardNumber[setName] = {};
 		cardData.forEach((card) => {
+			if (card == null) {
+				return;
+			}
 			cards.push(card);
 			if (card.name) {
 				const cardId = nameToId(card.name);
@@ -345,8 +354,12 @@ export const renderCollection = async (
 				cardDataBySetNameByCardNumber[line.cardSetCode][
 					line.cardNumber
 				];
-			line.cardName = cardData.name;
-			let cardId = nameToId(cardData.name);
+			if (cardData == null) {
+				line.cardName = `Card not found (${line.cardSetCode}/${line.cardNumber})`;
+			} else {
+				line.cardName = cardData.name;
+			}
+			let cardId = nameToId(line.cardName);
 			cardDataByCardId[cardId] = cardData;
 			if (!shouldSkipGlobalCounts) {
 				line.globalCount = cardCounts[cardId] || 0;
