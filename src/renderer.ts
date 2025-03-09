@@ -32,7 +32,9 @@ const setCodesRE = /(\([A-Za-z0-9]{3}\)\s\d+)/;
 const lineWithSetCodes = /(\d+)\s+([\w| ,']*)\s+(\([A-Za-z0-9]{3}\)\s\d+)/;
 const blankLineRE = /^\s+$/;
 const headingMatchRE = new RegExp("^[^[0-9|" + COMMENT_DELIMITER + "]");
-const numberRE = /\d+$/;
+// A card number in a set can be something like "123" but it can always be
+// (in the case of the list reprints) "ODY-46", eg. https://scryfall.com/card/plst/ODY-46/shelter
+const numberRE = /([a-zA-Z0-9]{0,4}-)*\d+$/;
 
 const currencyMapping = {
 	usd: "$",
@@ -80,15 +82,6 @@ export const parseLines = (
 				lineType: "blank",
 			};
 		}
-
-		// Handle headings
-		if (line.match(headingMatchRE)) {
-			return {
-				lineType: "section",
-				text: line,
-			};
-		}
-
 		// Handle comment lines
 		if (line.startsWith(COMMENT_DELIMITER + " ")) {
 			let setCode: string = extractSetCode(line);
@@ -110,6 +103,14 @@ export const parseLines = (
 				cardSetCode: currentSetCode,
 				cardCount: 1,
 				globalCount: null,
+			};
+		}
+
+		// Handle headings
+		if (line.match(headingMatchRE)) {
+			return {
+				lineType: "section",
+				text: line,
 			};
 		}
 
@@ -197,7 +198,6 @@ export const buildDistinctCardNumbersBySetList = (
 export const extractSetCode = (value: string): string => {
 	let setCode: string = "";
 	const parts: string[] = value.slice(1).split(",");
-	console.log(parts);
 	parts.forEach((setting, i) => {
 		const settingParts: string[] = setting.split("=");
 		if (settingParts.length == 2) {
@@ -330,7 +330,6 @@ export const renderCollection = async (
 	// Create list of distinct card names
 	const distinctCardNumbersBySet: Record<string, string[]> =
 		buildDistinctCardNumbersBySetList(parsedLines);
-	console.log(distinctCardNumbersBySet);
 	let cardDataBySetNameByCardNumber: Record<
 		string,
 		Record<string, CardData>
@@ -384,7 +383,6 @@ const render = async (
 	parsedLines: Line[],
 	isCollection: boolean
 ): Promise<Element> => {
-	console.log(cardDataByCardId);
 	const containerEl = createDiv(root, {});
 	containerEl.classList.add("decklist");
 	// Determines whether any card info was found for the cards on the list
@@ -464,6 +462,7 @@ const render = async (
 		const sectionMissingCardCounts: CardCounts = {};
 
 		// Create line item elements
+		console.log(linesBySection);
 		linesBySection[section].forEach((line: Line) => {
 			const lineEl = document.createElement("li");
 			lineEl.classList.add("decklist__section-list-item");
