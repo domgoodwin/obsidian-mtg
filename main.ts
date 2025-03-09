@@ -124,8 +124,6 @@ export default class ObsidianPluginMtg extends Plugin {
 		this.registerObsidianProtocolHandler(
 			"obsidian-mtg-action-sync-from-collection-list",
 			(params) => {
-				console.log("obsidian-mtg-action-sync-from-collection-list");
-				console.log(params);
 				syncFileIntoCollection(
 					vault,
 					this.settings,
